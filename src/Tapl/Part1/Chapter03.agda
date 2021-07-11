@@ -193,17 +193,20 @@ module SimpleLanguageEvaluation where
 
   open SimpleLanguage
 
-  data BooleanValue : Term → Set where
-    V-true : BooleanValue true
-    V-false : BooleanValue false
+  module Values where
+    data BooleanValue : Term → Set where
+      V-true : BooleanValue true
+      V-false : BooleanValue false
 
-  data NumericValue : Term → Set where
-    V-zero : NumericValue zero
-    V-succ : {n : Term} → (numeric : NumericValue n) → NumericValue (succ n)
+    data NumericValue : Term → Set where
+      V-zero : NumericValue zero
+      V-succ : {n : Term} → (numeric : NumericValue n) → NumericValue (succ n)
 
-  data Value : Term → Set where
-    V-bool : {t : Term} → (boolean : BooleanValue t) → Value t
-    V-num : {t : Term} → (numeric : NumericValue t) → Value t
+    data Value : Term → Set where
+      V-bool : {t : Term} → (boolean : BooleanValue t) → Value t
+      V-num : {t : Term} → (numeric : NumericValue t) → Value t
+
+  open Values
 
   infix 5 _%→_
 
@@ -406,3 +409,93 @@ module SimpleLanguageEvaluation where
   ... | inj₂ (x′ , x%↠x′ terminates-with V-bool boolean) = inj₁ (E-iszero↠ x%↠x′ stuck-%↠ stuck-iszero-bool boolean)
   ... | inj₂ (zero , x%↠zero terminates-with V-num V-zero) = inj₂ (true , (iszero x %↠⟨ E-iszero↠ x%↠zero ⟩ iszero zero %→⟨ E-iszeroZero ⟩ true ∎) terminates-with V-bool V-true)
   ... | inj₂ (succ x′ , x%↠succ-x′ terminates-with V-num (V-succ numeric)) = inj₂ (false , (iszero x %↠⟨ E-iszero↠ x%↠succ-x′ ⟩ iszero (succ x′) %→⟨ E-iszeroSucc numeric ⟩ false ∎) terminates-with V-bool V-false)
+
+module SimpleLanguageBigStepEvaluation where
+  open import Data.Product
+  open import Data.Sum
+  open import Function
+
+  open SimpleLanguage
+  open SimpleLanguageEvaluation.Values
+
+  infix 10 _⇓_
+
+  data _⇓_ : Term → Term → Set where
+    B-value : ∀ {t : Term} (value : Value t)
+      → t ⇓ t
+
+    B-ifTrue : ∀ {x y z v : Term}
+      → x ⇓ true
+      → y ⇓ v
+      → if x then y else z ⇓ v
+
+    B-ifFalse : ∀ {x y z v : Term}
+      → x ⇓ false
+      → z ⇓ v
+      → if x then y else z ⇓ v
+
+    B-succ : ∀ {t v : Term}
+      → t ⇓ v
+      → succ t ⇓ succ v
+
+    B-predZero : ∀ {t : Term}
+      → t ⇓ zero
+      → pred t ⇓ zero
+
+    B-predSucc : ∀ {t v : Term}
+      → t ⇓ succ v
+      → pred t ⇓ v
+
+    B-iszeroZero : ∀ {t : Term}
+      → t ⇓ zero
+      → iszero t ⇓ true
+
+    B-iszeroSucc : ∀ {t v : Term}
+      → t ⇓ succ v
+      → iszero t ⇓ false
+
+  infix 9 _stuck-⇓_
+
+  data Stuck : Term → Set where
+    stuck-if-num : ∀ {x y z : Term} → (numeric : NumericValue x) → Stuck (if x then y else z)
+    stuck-succ-bool : ∀ {t : Term} → (boolean : BooleanValue t) → Stuck (succ t)
+    stuck-pred-bool : ∀ {t : Term} → (boolean : BooleanValue t) → Stuck (pred t)
+    stuck-iszero-bool : ∀ {t : Term} → (boolean : BooleanValue t) → Stuck (iszero t)
+    stuck-if : ∀ {x y z : Term} → Stuck x → Stuck (if x then y else z)
+    stuck-ifTrue : ∀ {x x′ y z : Term} → x ⇓ x′ → Stuck y → Stuck (if x then y else z)
+    stuck-ifFalse : ∀ {x x′ y z : Term} → x ⇓ x′ → Stuck z → Stuck (if x then y else z)
+    stuck-succ : ∀ {t : Term} → Stuck t → Stuck (succ t)
+    stuck-pred : ∀ {t : Term} → Stuck t → Stuck (pred t)
+    stuck-iszero : ∀ {t : Term} → Stuck t → Stuck (iszero t)
+    _stuck-$_⇓_ : ∀ {t t′ : Term} → (f : Term → Term) → t ⇓ t′ → Stuck (f t′) → Stuck (f t)
+
+  _stuck-⇓_ : ∀ {t t′ : Term} → t ⇓ t′ → Stuck t′ → Stuck t
+  _stuck-⇓_ = _stuck-$_⇓_ id
+
+  eval : (t : Term) → Stuck t ⊎ ∃[ v ] (t ⇓ v × Value v)
+  eval true = inj₂ (true , B-value (V-bool V-true) , V-bool V-true)
+  eval false = inj₂ (false , B-value (V-bool V-false) , V-bool V-false)
+  eval (if x then y else z) with eval x
+  eval (if x then y else z) | inj₁ stuck = inj₁ (stuck-if stuck)
+  eval (if x then y else z) | inj₂ (x′ , x⇓x′ , V-num numeric) = inj₁ ((if_then y else z) stuck-$ x⇓x′ ⇓ stuck-if-num numeric)
+  eval (if x then y else z) | inj₂ (true , x⇓x′ , V-bool V-true) with eval y
+  ... | inj₁ stuck = inj₁ (stuck-ifTrue x⇓x′ stuck)
+  ... | inj₂ (y′ , y⇓y′ , value) = inj₂ (y′ , B-ifTrue x⇓x′ y⇓y′ , value)
+  eval (if x then y else z) | inj₂ (false , x⇓x′ , V-bool V-false) with eval z
+  ... | inj₁ stuck = inj₁ (stuck-ifFalse x⇓x′ stuck)
+  ... | inj₂ (z′ , z⇓z′ , value) = inj₂ (z′ , B-ifFalse x⇓x′ z⇓z′ , value)
+  eval zero = inj₂ (zero , B-value (V-num V-zero) , V-num V-zero)
+  eval (succ x) with eval x
+  ... | inj₁ stuck = inj₁ (stuck-succ stuck)
+  ... | inj₂ (_ , x⇓x′ , V-bool boolean) = inj₁ (B-succ x⇓x′ stuck-⇓ stuck-succ-bool boolean)
+  ... | inj₂ (x′ , x⇓x′ , V-num numeric) = inj₂ (succ x′ , B-succ x⇓x′ , V-num (V-succ numeric))
+  eval (pred x) with eval x
+  ... | inj₁ stuck = inj₁ (stuck-pred stuck)
+  ... | inj₂ (_ , x⇓x′ , V-bool boolean) = inj₁ (pred stuck-$ x⇓x′ ⇓ stuck-pred-bool boolean)
+  ... | inj₂ (zero , x⇓x′ , V-num V-zero) = inj₂ (zero , B-predZero x⇓x′ , V-num V-zero)
+  ... | inj₂ (succ x′ , x⇓x′ , V-num (V-succ numeric)) = inj₂ (x′ , B-predSucc x⇓x′ , V-num numeric)
+  eval (iszero x) with eval x
+  ... | inj₁ stuck = inj₁ (stuck-iszero stuck)
+  ... | inj₂ (_ , x⇓x′ , V-bool boolean) = inj₁ (iszero stuck-$ x⇓x′ ⇓ stuck-iszero-bool boolean)
+  ... | inj₂ (zero , x⇓x′ , V-num V-zero) = inj₂ (true , B-iszeroZero x⇓x′ , V-bool V-true)
+  ... | inj₂ (succ x′ , x⇓x′ , V-num (V-succ numeric)) = inj₂ (false , B-iszeroSucc x⇓x′ , V-bool V-false)
