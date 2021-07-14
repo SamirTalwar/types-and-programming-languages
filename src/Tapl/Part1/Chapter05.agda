@@ -86,6 +86,12 @@ module LambdaCalculus where
   !^ = fn "m" ⇒ fn "n" ⇒ ! "n" $ (!* $ ! "m") $ !1
   !eq = fn "m" ⇒ fn "n" ⇒ !and $ (!iszero $ (!- $ ! "m" $ ! "n")) $ (!iszero $ (!- $ ! "n" $ ! "m"))
 
+  !nil = fn "c" ⇒ fn "n" ⇒ ! "n"
+  !cons = fn "x" ⇒ fn "xs" ⇒ fn "c" ⇒ fn "n" ⇒ ! "c" $ ! "x" $ (! "xs" $ ! "c" $ ! "n")
+  !isnil = fn "xs" ⇒ ! "xs" $ (fn "_" ⇒ fn "_" ⇒ !false) $ !true
+  !head = fn "xs" ⇒ fn "default" ⇒ ! "xs" $ (fn "x" ⇒ fn "_" ⇒ ! "x") $ ! "default"
+  !tail = fn "xs" ⇒ !fst $ (! "xs" $ (fn "x" ⇒ fn "p" ⇒ !pair $ (!snd $ ! "p") $ (!cons $ ! "x" $ (!snd $ ! "p"))) $ (!pair $ !nil $ !nil))
+
   reduce∞ : Term → Maybe Term
   reduce∞ t = reduce t 10000
 
@@ -148,3 +154,33 @@ module LambdaCalculus where
 
   _ : reduce∞ (!eq $ (!+ $ !3 $ !3) $ (!* $ !3 $ !3)) ≡ just !false
   _ = refl
+
+  _ : reduce∞ ((!cons $ !1 $ (!cons $ !2 $ (!cons $ !3 $ !nil))) $ !+ $ !0) ≡ reduce∞ (!+ $ !3 $ !3)
+  _ = refl
+
+  _ : reduce∞ (!isnil $ !nil) ≡ just !true
+  _ = refl
+
+  _ : reduce∞ (!isnil $ (!cons $ !1 $ !nil)) ≡ just !false
+  _ = refl
+
+  _ : reduce∞ (!head $ !nil $ !3) ≡ just !3
+  _ = refl
+
+  _ : reduce∞ (!head $ (!cons $ !true $ !nil) $ !1) ≡ just !true
+  _ = refl
+
+  _ : reduce∞ (!head $ (!cons $ !2 $ (!cons $ !false $ !nil)) $ !1) ≡ just !2
+  _ = refl
+
+  _ : reduce∞ (!tail $ !nil) ≡ just !nil
+  _ = refl
+
+  _ : reduce∞ (!tail $ (!cons $ !true $ !nil)) ≡ just !nil
+  _ = refl
+
+  -- Too slow:
+  -- _ : reduce∞ (!tail $ (!cons $ !2 $ (!cons $ !false $ !nil))) ≡ just (!cons $ !false $ !nil)
+  -- _ = refl
+  -- _ : reduce∞ (!tail $ (!cons $ !true (!cons $ !1 $ (!cons $ !2 $ !nil)))) ≡ just (!cons $ !1 $ (!cons $ !2 $ !nil))
+  -- _ = refl
