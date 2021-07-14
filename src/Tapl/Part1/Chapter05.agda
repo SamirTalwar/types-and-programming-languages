@@ -73,13 +73,78 @@ module LambdaCalculus where
   !fst = fn "pair" ⇒ ! "pair" $ !true
   !snd = fn "pair" ⇒ ! "pair" $ !false
 
-  lots-of-iterations = 1000
+  !0 = fn "s" ⇒ fn "z" ⇒ ! "z"
+  !1 = fn "s" ⇒ fn "z" ⇒ ! "s" $ ! "z"
+  !2 = fn "s" ⇒ fn "z" ⇒ ! "s" $ (! "s" $ ! "z")
+  !3 = fn "s" ⇒ fn "z" ⇒ ! "s" $ (! "s" $ (! "s" $ ! "z"))
+  !iszero = fn "n" ⇒ ! "n" $ (fn "_" ⇒ !false) $ !true
+  !succ = fn "n" ⇒ fn "s" ⇒ fn "z" ⇒ ! "s" $ (! "n" $ ! "s" $ ! "z")
+  !pred = fn "n" ⇒ !fst $ (! "n" $ (fn "p" ⇒ !pair $ (!snd $ ! "p") $ (!succ $ (!snd $ ! "p"))) $ (!pair $ !0 $ !0))
+  !+ = fn "m" ⇒ fn "n" ⇒ fn "s" ⇒ fn "z" ⇒ ! "m" $ ! "s" $ (! "n" $ ! "s" $ ! "z")
+  !- = fn "m" ⇒ fn "n" ⇒ ! "n" $ !pred $ ! "m"
+  !* = fn "m" ⇒ fn "n" ⇒ ! "n" $ (!+ $ ! "m") $ !0
+  !^ = fn "m" ⇒ fn "n" ⇒ ! "n" $ (!* $ ! "m") $ !1
+  !eq = fn "m" ⇒ fn "n" ⇒ !and $ (!iszero $ (!- $ ! "m" $ ! "n")) $ (!iszero $ (!- $ ! "n" $ ! "m"))
 
-  _ : reduce (!if $ !true $ ! "true" $ ! "false") lots-of-iterations ≡ just (! "true")
+  reduce∞ : Term → Maybe Term
+  reduce∞ t = reduce t 10000
+
+  _ : reduce∞ (!if $ !true $ ! "true" $ ! "false") ≡ just (! "true")
   _ = refl
 
-  _ : reduce (!if $ (!or $ (!not $ !true) $ (!and $ !true $ !false)) $ ! "true" $ ! "false") lots-of-iterations ≡ just (! "false")
+  _ : reduce∞ (!if $ (!or $ (!not $ !true) $ (!and $ !true $ !false)) $ ! "true" $ ! "false") ≡ just (! "false")
   _ = refl
 
-  _ : reduce (!fst $ (!pair $ ! "v" $ ! "w")) lots-of-iterations ≡ just (! "v")
+  _ : reduce∞ (!fst $ (!pair $ ! "v" $ ! "w")) ≡ just (! "v")
+  _ = refl
+
+  _ : reduce∞ (!succ $ (!succ $ (!succ $ !0))) ≡ just !3
+  _ = refl
+
+  _ : reduce∞ (!pred $ !0) ≡ just !0
+  _ = refl
+
+  _ : reduce∞ (!pred $ (!succ $ (!pred $ (!succ $ (!succ $ !0))))) ≡ just !1
+  _ = refl
+
+  _ : reduce∞ (!iszero $ !0) ≡ just !true
+  _ = refl
+
+  _ : reduce∞ (!iszero $ !1) ≡ just !false
+  _ = refl
+
+  _ : reduce∞ (!+ $ !1 $ !2) ≡ just !3
+  _ = refl
+
+  _ : reduce∞ (!- $ !3 $ !2) ≡ just !1
+  _ = refl
+
+  _ : reduce∞ (!- $ !2 $ !3) ≡ just !0
+  _ = refl
+
+  _ : reduce∞ (!* $ !1 $ !3) ≡ just !3
+  _ = refl
+
+  _ : reduce∞ (!* $ !3 $ !2) ≡ reduce∞ (!+ $ !3 $ !3)
+  _ = refl
+
+  _ : reduce∞ (!iszero $ (!* $ !2 $ !0)) ≡ just !true
+  _ = refl
+
+  _ : reduce∞ (!^ $ !2 $ !1) ≡ just !2
+  _ = refl
+
+  _ : reduce∞ (!^ $ !3 $ !2) ≡ reduce∞ (!+ $ !3 $ (!+ $ !3 $ !3))
+  _ = refl
+
+  _ : reduce∞ (!eq $ !3 $ !2) ≡ just !false
+  _ = refl
+
+  _ : reduce∞ (!eq $ !2 $ !2) ≡ just !true
+  _ = refl
+
+  _ : reduce∞ (!eq $ (!+ $ !2 $ !2) $ (!* $ !2 $ !2)) ≡ just !true
+  _ = refl
+
+  _ : reduce∞ (!eq $ (!+ $ !3 $ !3) $ (!* $ !3 $ !3)) ≡ just !false
   _ = refl
