@@ -66,10 +66,10 @@ module LambdaCalculus where
   reduce₁ (f $p prim x) = f x
   reduce₁ (f $p x) = Maybe.map (f $p_) (reduce₁ x)
 
-  reduce : ∀ {P} → Lang P → ℕ → Maybe (Lang P)
-  reduce _ zero = nothing
+  reduce : ∀ {P} → Lang P → ℕ → Lang P
+  reduce t zero = t
   reduce t (suc max-iterations) with reduce₁ t
-  ... | nothing = just t
+  ... | nothing = t
   ... | just t′ = reduce t′ max-iterations
 
   !id : ∀ {P} → Lang P
@@ -132,97 +132,97 @@ module LambdaCalculus where
   !tail = fn "xs" ⇒ !fst $ (! "xs" $ (fn "x" ⇒ fn "p" ⇒ !pair $ (!snd $ ! "p") $ (!cons $ ! "x" $ (!snd $ ! "p"))) $ (!pair $ !nil $ !nil))
 
   module Examples where
-    reduce∞ : Lang ⊥ → Maybe (Lang ⊥)
+    reduce∞ : Lang ⊥ → Lang ⊥
     reduce∞ t = reduce t 10000
 
-    _ : reduce∞ (!if $ !true $ ! "true" $ ! "false") ≡ just (! "true")
+    _ : reduce∞ (!if $ !true $ ! "true" $ ! "false") ≡ ! "true"
     _ = refl
 
-    _ : reduce∞ (!if $ (!or $ (!not $ !true) $ (!and $ !true $ !false)) $ ! "true" $ ! "false") ≡ just (! "false")
+    _ : reduce∞ (!if $ (!or $ (!not $ !true) $ (!and $ !true $ !false)) $ ! "true" $ ! "false") ≡ ! "false"
     _ = refl
 
-    _ : reduce∞ (!fst $ (!pair $ ! "v" $ ! "w")) ≡ just (! "v")
+    _ : reduce∞ (!fst $ (!pair $ ! "v" $ ! "w")) ≡ ! "v"
     _ = refl
 
-    _ : reduce∞ (!succ $ (!succ $ (!succ $ !0))) ≡ just !3
+    _ : reduce∞ (!succ $ (!succ $ (!succ $ !0))) ≡ !3
     _ = refl
 
-    _ : reduce∞ (!pred $ !0) ≡ just !0
+    _ : reduce∞ (!pred $ !0) ≡ !0
     _ = refl
 
-    _ : reduce∞ (!pred $ (!succ $ (!pred $ (!succ $ (!succ $ !0))))) ≡ just !1
+    _ : reduce∞ (!pred $ (!succ $ (!pred $ (!succ $ (!succ $ !0))))) ≡ !1
     _ = refl
 
-    _ : reduce∞ (!iszero $ !0) ≡ just !true
+    _ : reduce∞ (!iszero $ !0) ≡ !true
     _ = refl
 
-    _ : reduce∞ (!iszero $ !1) ≡ just !false
+    _ : reduce∞ (!iszero $ !1) ≡ !false
     _ = refl
 
-    _ : reduce∞ (!+ $ !1 $ !2) ≡ just !3
+    _ : reduce∞ (!+ $ !1 $ !2) ≡ !3
     _ = refl
 
-    _ : reduce∞ (!- $ !3 $ !2) ≡ just !1
+    _ : reduce∞ (!- $ !3 $ !2) ≡ !1
     _ = refl
 
-    _ : reduce∞ (!- $ !2 $ !3) ≡ just !0
+    _ : reduce∞ (!- $ !2 $ !3) ≡ !0
     _ = refl
 
-    _ : reduce∞ (!* $ !1 $ !3) ≡ just !3
+    _ : reduce∞ (!* $ !1 $ !3) ≡ !3
     _ = refl
 
     _ : reduce∞ (!* $ !3 $ !2) ≡ reduce∞ (!+ $ !3 $ !3)
     _ = refl
 
-    _ : reduce∞ (!iszero $ (!* $ !2 $ !0)) ≡ just !true
+    _ : reduce∞ (!iszero $ (!* $ !2 $ !0)) ≡ !true
     _ = refl
 
-    _ : reduce∞ (!^ $ !2 $ !1) ≡ just !2
+    _ : reduce∞ (!^ $ !2 $ !1) ≡ !2
     _ = refl
 
     _ : reduce∞ (!^ $ !3 $ !2) ≡ reduce∞ (!+ $ !3 $ (!+ $ !3 $ !3))
     _ = refl
 
-    _ : reduce∞ (!eq $ !3 $ !2) ≡ just !false
+    _ : reduce∞ (!eq $ !3 $ !2) ≡ !false
     _ = refl
 
-    _ : reduce∞ (!eq $ !2 $ !2) ≡ just !true
+    _ : reduce∞ (!eq $ !2 $ !2) ≡ !true
     _ = refl
 
-    _ : reduce∞ (!eq $ (!+ $ !2 $ !2) $ (!* $ !2 $ !2)) ≡ just !true
+    _ : reduce∞ (!eq $ (!+ $ !2 $ !2) $ (!* $ !2 $ !2)) ≡ !true
     _ = refl
 
-    _ : reduce∞ (!eq $ (!+ $ !3 $ !3) $ (!* $ !3 $ !3)) ≡ just !false
+    _ : reduce∞ (!eq $ (!+ $ !3 $ !3) $ (!* $ !3 $ !3)) ≡ !false
     _ = refl
 
     _ : reduce∞ ((!cons $ !1 $ (!cons $ !2 $ (!cons $ !3 $ !nil))) $ !+ $ !0) ≡ reduce∞ (!+ $ !3 $ !3)
     _ = refl
 
-    _ : reduce∞ (!isnil $ !nil) ≡ just !true
+    _ : reduce∞ (!isnil $ !nil) ≡ !true
     _ = refl
 
-    _ : reduce∞ (!isnil $ (!cons $ !1 $ !nil)) ≡ just !false
+    _ : reduce∞ (!isnil $ (!cons $ !1 $ !nil)) ≡ !false
     _ = refl
 
-    _ : reduce∞ (!head $ !nil $ !3) ≡ just !3
+    _ : reduce∞ (!head $ !nil $ !3) ≡ !3
     _ = refl
 
-    _ : reduce∞ (!head $ (!cons $ !true $ !nil) $ !1) ≡ just !true
+    _ : reduce∞ (!head $ (!cons $ !true $ !nil) $ !1) ≡ !true
     _ = refl
 
-    _ : reduce∞ (!head $ (!cons $ !2 $ (!cons $ !false $ !nil)) $ !1) ≡ just !2
+    _ : reduce∞ (!head $ (!cons $ !2 $ (!cons $ !false $ !nil)) $ !1) ≡ !2
     _ = refl
 
-    _ : reduce∞ (!tail $ !nil) ≡ just !nil
+    _ : reduce∞ (!tail $ !nil) ≡ !nil
     _ = refl
 
-    _ : reduce∞ (!tail $ (!cons $ !true $ !nil)) ≡ just !nil
+    _ : reduce∞ (!tail $ (!cons $ !true $ !nil)) ≡ !nil
     _ = refl
 
     -- Too slow:
-    -- _ : reduce∞ (!tail $ (!cons $ !2 $ (!cons $ !false $ !nil))) ≡ just (!cons $ !false $ !nil)
+    -- _ : reduce∞ (!tail $ (!cons $ !2 $ (!cons $ !false $ !nil))) ≡ !cons $ !false $ !nil
     -- _ = refl
-    -- _ : reduce∞ (!tail $ (!cons $ !true (!cons $ !1 $ (!cons $ !2 $ !nil)))) ≡ just (!cons $ !1 $ (!cons $ !2 $ !nil))
+    -- _ : reduce∞ (!tail $ (!cons $ !true (!cons $ !1 $ (!cons $ !2 $ !nil)))) ≡ !cons $ !1 $ (!cons $ !2 $ !nil)
     -- _ = refl
 
   module LangNB where
@@ -242,27 +242,27 @@ module LambdaCalculus where
     !nat→^nat = fn "n" ⇒ ! "n" $ (fn "x" ⇒ (λ{ (bool _) → nothing ; (nat n) → just (prim (nat (suc n))) }) $p ! "x") $ prim (nat zero)
 
     module LangNBExamples where
-      reduce∞ : Term → Maybe Term
+      reduce∞ : Term → Term
       reduce∞ t = reduce t 10000
 
-      !true⇢^true : reduce∞ (!bool→^bool $ !true) ≡ just (prim (bool true))
+      !true⇢^true : reduce∞ (!bool→^bool $ !true) ≡ prim (bool true)
       !true⇢^true = refl
 
-      !false⇢^false : reduce∞ (!bool→^bool $ !false) ≡ just (prim (bool false))
+      !false⇢^false : reduce∞ (!bool→^bool $ !false) ≡ prim (bool false)
       !false⇢^false = refl
 
-      ^true⇢!true : reduce∞ (^bool→!bool $ prim (bool true)) ≡ just !true
+      ^true⇢!true : reduce∞ (^bool→!bool $ prim (bool true)) ≡ !true
       ^true⇢!true = refl
 
-      ^false⇢!false : reduce∞ (^bool→!bool $ prim (bool false)) ≡ just !false
+      ^false⇢!false : reduce∞ (^bool→!bool $ prim (bool false)) ≡ !false
       ^false⇢!false = refl
 
-      ^bool-round-trip : ∀ (b : Bool) → reduce∞ (!bool→^bool $ (^bool→!bool $ prim (bool b))) ≡ just (prim (bool b))
+      ^bool-round-trip : ∀ (b : Bool) → reduce∞ (!bool→^bool $ (^bool→!bool $ prim (bool b))) ≡ prim (bool b)
       ^bool-round-trip false = refl
       ^bool-round-trip true = refl
 
-      !0→^0 : reduce∞ (!nat→^nat $ !0) ≡ just (prim (nat 0))
+      !0→^0 : reduce∞ (!nat→^nat $ !0) ≡ prim (nat 0)
       !0→^0 = refl
 
-      !3→^3 : reduce∞ (!nat→^nat $ !3) ≡ just (prim (nat 3))
+      !3→^3 : reduce∞ (!nat→^nat $ !3) ≡ prim (nat 3)
       !3→^3 = refl
