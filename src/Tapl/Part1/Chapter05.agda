@@ -42,22 +42,15 @@ module LambdaCalculus where
   _ = refl
 
   substitute : ∀ {P} → Id → Lang P → Lang P → Lang P
-  substitute id new-term old-term = substitute′ id new-term old-term []
-    where
-    contains : Id → List Id → Bool
-    contains x [] = false
-    contains x (y ∷ ys) with does (x ≈? y)
-    ... | false = contains x ys
-    ... | true  = true
-    substitute′ : ∀ {P} → Id → Lang P → Lang P → List Id → Lang P
-    substitute′ id new-term old-term@(! x) bound with does (id ≈? x) | contains id bound
-    ... | true  | false = new-term
-    ... | true  | true  = old-term
-    ... | false | _     = old-term
-    substitute′ id new-term (fn x ⇒ t) bound = fn x ⇒ substitute′ id new-term t (x ∷ bound)
-    substitute′ id new-term (f $ x) bound = substitute′ id new-term f bound $ substitute′ id new-term x bound
-    substitute′ _ _ old-term@(prim _) _ = old-term
-    substitute′ id new-term (f $p x) bound = f $p substitute′ id new-term x bound
+  substitute id new-term old-term@(! x) with does (id ≈? x)
+  ... | true  = new-term
+  ... | false = old-term
+  substitute id new-term t@(fn input ⇒ output) with does (id ≈? input)
+  ... | true = t
+  ... | false = fn input ⇒ substitute id new-term output
+  substitute id new-term (f $ x) = substitute id new-term f $ substitute id new-term x
+  substitute _ _ old-term@(prim _) = old-term
+  substitute id new-term (f $p x) = f $p substitute id new-term x
 
   reduce₁ : ∀ {P} → Lang P → Maybe (Lang P)
   reduce₁ (! _) = nothing
