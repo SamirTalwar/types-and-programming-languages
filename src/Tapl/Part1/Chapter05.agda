@@ -6,8 +6,10 @@ open import Data.Maybe as Maybe using (Maybe; just; nothing)
 open import Data.List as List using (List; []; _∷_)
 open import Data.Nat as Nat using (ℕ; zero; suc)
 open import Data.Product
-open import Data.String using (String; _≈?_)
+open import Data.String as String using (String; _≈?_)
+import Data.String.Properties
 open import Relation.Binary.PropositionalEquality
+open import Relation.Binary.Structures
 open import Relation.Nullary
 
 module LambdaCalculus where
@@ -54,11 +56,23 @@ module LambdaCalculus where
   ... | true  = new-term
   ... | false = old-term
   substitute id new-term t@(fn input ⇒ output) with does (id ≈? input)
-  ... | true = t
+  ... | true  = t
   ... | false = fn input ⇒ substitute id new-term output
   substitute id new-term (f $ x) = substitute id new-term f $ substitute id new-term x
   substitute _ _ old-term@(prim _) = old-term
   substitute id new-term (prim-app f substitutions x) = prim-app f ((id , new-term) ∷ substitutions) (substitute id new-term x)
+
+  substitutions-replace-variables : ∀ {P} (id : Id) (new-term : Lang P)
+    → substitute id new-term (! id) ≡ new-term
+  substitutions-replace-variables id new-term with id ≈? id
+  ... | yes _ = refl
+  ... | no ¬p = ⊥-elim (¬p (IsEquivalence.refl Data.String.Properties.≈-isEquivalence {x = id}))
+
+  substitutions-do-not-replace-bound-variables : ∀ {P} (id : Id) (new-term : Lang P)
+    → substitute id new-term (fn id ⇒ ! id) ≡ fn id ⇒ ! id
+  substitutions-do-not-replace-bound-variables id new-term with id ≈? id
+  ... | yes _ = refl
+  ... | no ¬p = ⊥-elim (¬p (IsEquivalence.refl Data.String.Properties.≈-isEquivalence {x = id}))
 
   reduce₁ : ∀ {P} → Lang P → Maybe (Lang P)
   reduce₁ (! _) = nothing
