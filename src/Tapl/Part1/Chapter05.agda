@@ -27,12 +27,12 @@ module LambdaCalculus where
     _$_ : Lang Primitive → Lang Primitive → Lang Primitive  -- application
     prim : Primitive → Lang Primitive                        -- primitive
     prim-app :                                                -- primitive application
-        (Primitive → Maybe (Lang Primitive))    -- function
-      → List (Id × Lang Primitive)              -- delayed substitution
-      → Lang Primitive                          -- term
+        (Primitive → Lang Primitive)    -- function
+      → List (Id × Lang Primitive)      -- delayed substitution
+      → Lang Primitive                  -- term
       → Lang Primitive
 
-  _$p_ : ∀ {Primitive} → (Primitive → Maybe (Lang Primitive)) → Lang Primitive → Lang Primitive
+  _$p_ : ∀ {Primitive} → (Primitive → Lang Primitive) → Lang Primitive → Lang Primitive
   f $p x = prim-app f [] x
 
   -- Verify that parsing works.
@@ -83,7 +83,7 @@ module LambdaCalculus where
   reduce₁ (t@(prim-app f substitutions x) $ y) = Maybe.map (_$ y) (reduce₁ t)
   reduce₁ (prim _ $ _) = nothing -- invalid
   reduce₁ (prim _) = nothing
-  reduce₁ (prim-app f substitutions (prim x)) = Maybe.map (λ x′ → List.foldl (λ{ t (id , new-term) → substitute id new-term t }) x′ substitutions) (f x)
+  reduce₁ (prim-app f substitutions (prim x)) = just (List.foldl (λ{ t (id , new-term) → substitute id new-term t }) (f x) substitutions)
   reduce₁ (prim-app f substitutions x) = Maybe.map (prim-app f substitutions) (reduce₁ x)
 
   reduce : ∀ {P} → Lang P → ℕ → Lang P
@@ -286,13 +286,13 @@ module LambdaCalculus where
     !bool→^bool = fn "b" ⇒ ! "b" $ prim (bool true) $ prim (bool false)
 
     ^bool→!bool : Term
-    ^bool→!bool = fn "b" ⇒ (λ{ (bool b) → just (if b then !true else !false) ; (nat _) → nothing }) $p ! "b"
+    ^bool→!bool = fn "b" ⇒ (λ{ (bool b) → if b then !true else !false ; t@(nat _) → prim t }) $p ! "b"
 
     !nat→^nat : Term
-    !nat→^nat = fn "n" ⇒ ! "n" $ (fn "x" ⇒ (λ{ (bool _) → nothing ; (nat n) → just (prim (nat (suc n))) }) $p ! "x") $ prim (nat zero)
+    !nat→^nat = fn "n" ⇒ ! "n" $ (fn "x" ⇒ (λ{ t@(bool _) → prim t ; (nat n) → prim (nat (suc n)) }) $p ! "x") $ prim (nat zero)
 
     ^nat→!nat : Term
-    ^nat→!nat = !fix $ (fn "recurse" ⇒ fn "n" ⇒ (λ{ (bool _) → nothing ; (nat zero) → just !0 ; (nat (suc n)) → just (!succ $ (! "recurse" $ prim (nat n))) }) $p ! "n")
+    ^nat→!nat = !fix $ (fn "recurse" ⇒ fn "n" ⇒ (λ{ t@(bool _) → prim t ; (nat zero) → !0 ; (nat (suc n)) → !succ $ (! "recurse" $ prim (nat n)) }) $p ! "n")
 
     module LangNBExamples where
       reduce∞ : Term → Term
