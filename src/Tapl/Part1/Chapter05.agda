@@ -3,8 +3,9 @@ module Tapl.Part1.Chapter05 where
 open import Data.Bool
 open import Data.Empty
 open import Data.Maybe as Maybe using (Maybe; just; nothing)
-open import Data.List using (List; []; _∷_)
+open import Data.List as List using (List; []; _∷_)
 open import Data.Nat as Nat using (ℕ; zero; suc)
+open import Data.Product
 open import Data.String using (String; _≈?_)
 open import Relation.Binary.PropositionalEquality
 open import Relation.Nullary
@@ -23,7 +24,14 @@ module LambdaCalculus where
     fn_⇒_ : Id → Lang Primitive → Lang Primitive           -- abstraction
     _$_ : Lang Primitive → Lang Primitive → Lang Primitive  -- application
     prim : Primitive → Lang Primitive                        -- primitive
-    _$p_ : (Primitive → Maybe (Lang Primitive)) → Lang Primitive → Lang Primitive -- primitive application
+    prim-app :                                                -- primitive application
+        (Primitive → Maybe (Lang Primitive))    -- function
+      → List (Id × Lang Primitive)              -- delayed substitution
+      → Lang Primitive                          -- term
+      → Lang Primitive
+
+  _$p_ : ∀ {Primitive} → (Primitive → Maybe (Lang Primitive)) → Lang Primitive → Lang Primitive
+  f $p x = prim-app f [] x
 
   -- Verify that parsing works.
   _ : ∀ {P} → Lang P
@@ -50,21 +58,19 @@ module LambdaCalculus where
   ... | false = fn input ⇒ substitute id new-term output
   substitute id new-term (f $ x) = substitute id new-term f $ substitute id new-term x
   substitute _ _ old-term@(prim _) = old-term
-  substitute id new-term (f $p x) = f $p substitute id new-term x
+  substitute id new-term (prim-app f substitutions x) = prim-app f ((id , new-term) ∷ substitutions) (substitute id new-term x)
 
   reduce₁ : ∀ {P} → Lang P → Maybe (Lang P)
   reduce₁ (! _) = nothing
   reduce₁ (fn x ⇒ t) = Maybe.map (fn x ⇒_) (reduce₁ t)
   reduce₁ (! var $ x) = Maybe.map (! var $_) (reduce₁ x) -- free variable
-  reduce₁ ((fn input ⇒ output) $ x) with reduce₁ x
-  ... | just x′ = just ((fn input ⇒ output) $ x′)
-  ... | nothing = just (substitute input x output)
-  reduce₁ (f $ x $ y) = Maybe.map (_$ y) (reduce₁ (f $ x))
+  reduce₁ ((fn input ⇒ output) $ x) = just (substitute input x output)
+  reduce₁ (t@(f $ x) $ y) = Maybe.map (_$ y) (reduce₁ t)
+  reduce₁ (t@(prim-app f substitutions x) $ y) = Maybe.map (_$ y) (reduce₁ t)
   reduce₁ (prim _ $ _) = nothing -- invalid
-  reduce₁ (_ $p _ $ _) = nothing -- invalid
   reduce₁ (prim _) = nothing
-  reduce₁ (f $p prim x) = f x
-  reduce₁ (f $p x) = Maybe.map (f $p_) (reduce₁ x)
+  reduce₁ (prim-app f substitutions (prim x)) = Maybe.map (λ x′ → List.foldl (λ{ t (id , new-term) → substitute id new-term t }) x′ substitutions) (f x)
+  reduce₁ (prim-app f substitutions x) = Maybe.map (prim-app f substitutions) (reduce₁ x)
 
   reduce : ∀ {P} → Lang P → ℕ → Lang P
   reduce t zero = t
@@ -131,9 +137,21 @@ module LambdaCalculus where
   !tail : ∀ {P} → Lang P
   !tail = fn "xs" ⇒ !fst $ (! "xs" $ (fn "x" ⇒ fn "p" ⇒ !pair $ (!snd $ ! "p") $ (!cons $ ! "x" $ (!snd $ ! "p"))) $ (!pair $ !nil $ !nil))
 
+  !omega : ∀ {P} → Lang P
+  !omega = (fn "x" ⇒ ! "x" $ ! "x") $ (fn "x" ⇒ ! "x" $ ! "x")
+
+  !fix : ∀ {P} → Lang P
+  !fix = fn "f" ⇒ (fn "x" ⇒ ! "f" $ (! "x" $ ! "x")) $ (fn "x" ⇒ ! "f" $ (! "x" $ ! "x"))
+
+  !factorial : ∀ {P} → Lang P
+  !factorial = !fix $ (fn "recurse" ⇒ fn "n" ⇒ !if $ (!iszero $ ! "n") $ !1 $ (!* $ ! "n" $ (! "recurse" $ (!pred $ ! "n"))))
+
+  !sum : ∀ {P} → Lang P
+  !sum = fn "list" ⇒ ! "list" $ !+ $ !0
+
   module Examples where
     reduce∞ : Lang ⊥ → Lang ⊥
-    reduce∞ t = reduce t 10000
+    reduce∞ t = reduce t 100
 
     _ : reduce∞ (!if $ !true $ ! "true" $ ! "false") ≡ ! "true"
     _ = refl
@@ -183,16 +201,16 @@ module LambdaCalculus where
     _ : reduce∞ (!^ $ !3 $ !2) ≡ reduce∞ (!+ $ !3 $ (!+ $ !3 $ !3))
     _ = refl
 
-    _ : reduce∞ (!eq $ !3 $ !2) ≡ !false
+    _ : reduce {⊥} (!eq $ !3 $ !2) 1000 ≡ !false
     _ = refl
 
-    _ : reduce∞ (!eq $ !2 $ !2) ≡ !true
+    _ : reduce {⊥} (!eq $ !2 $ !2) 1000 ≡ !true
     _ = refl
 
-    _ : reduce∞ (!eq $ (!+ $ !2 $ !2) $ (!* $ !2 $ !2)) ≡ !true
+    _ : reduce {⊥} (!eq $ (!+ $ !2 $ !2) $ (!* $ !2 $ !2)) 1000 ≡ !true
     _ = refl
 
-    _ : reduce∞ (!eq $ (!+ $ !3 $ !3) $ (!* $ !3 $ !3)) ≡ !false
+    _ : reduce {⊥} (!eq $ (!+ $ !3 $ !3) $ (!* $ !3 $ !3)) 10000 ≡ !false
     _ = refl
 
     _ : reduce∞ ((!cons $ !1 $ (!cons $ !2 $ (!cons $ !3 $ !nil))) $ !+ $ !0) ≡ reduce∞ (!+ $ !3 $ !3)
@@ -225,6 +243,24 @@ module LambdaCalculus where
     -- _ : reduce∞ (!tail $ (!cons $ !true (!cons $ !1 $ (!cons $ !2 $ !nil)))) ≡ !cons $ !1 $ (!cons $ !2 $ !nil)
     -- _ = refl
 
+    omega-does-not-reduce : ∀ {P} → reduce₁ {P} !omega ≡ just !omega
+    omega-does-not-reduce = refl
+
+    _ : reduce∞ (!factorial $ !0) ≡ !1
+    _ = refl
+
+    _ : reduce∞ (!factorial $ !1) ≡ !1
+    _ = refl
+
+    _ : reduce {⊥} (!factorial $ !2) 1000 ≡ !2
+    _ = refl
+
+    _ : reduce {⊥} (!factorial $ !3) 1000 ≡ reduce∞ (!+ $ !3 $ !3)
+    _ = refl
+
+    _ : reduce∞ (!sum $ (!cons $ !1 $ (!cons $ !2 $ (!cons $ !3 $ (!cons $ !2 $ (!cons $ !1 $ !nil)))))) ≡ reduce∞ (!+ $ !3 $ (!+ $ !3 $ !3))
+    _ = refl
+
   module LangNB where
     data NB : Set where
       bool : Bool → NB
@@ -241,9 +277,12 @@ module LambdaCalculus where
     !nat→^nat : Term
     !nat→^nat = fn "n" ⇒ ! "n" $ (fn "x" ⇒ (λ{ (bool _) → nothing ; (nat n) → just (prim (nat (suc n))) }) $p ! "x") $ prim (nat zero)
 
+    ^nat→!nat : Term
+    ^nat→!nat = !fix $ (fn "recurse" ⇒ fn "n" ⇒ (λ{ (bool _) → nothing ; (nat zero) → just !0 ; (nat (suc n)) → just (!succ $ (! "recurse" $ prim (nat n))) }) $p ! "n")
+
     module LangNBExamples where
       reduce∞ : Term → Term
-      reduce∞ t = reduce t 10000
+      reduce∞ t = reduce t 100
 
       !true⇢^true : reduce∞ (!bool→^bool $ !true) ≡ prim (bool true)
       !true⇢^true = refl
@@ -257,12 +296,17 @@ module LambdaCalculus where
       ^false⇢!false : reduce∞ (^bool→!bool $ prim (bool false)) ≡ !false
       ^false⇢!false = refl
 
-      ^bool-round-trip : ∀ (b : Bool) → reduce∞ (!bool→^bool $ (^bool→!bool $ prim (bool b))) ≡ prim (bool b)
-      ^bool-round-trip false = refl
-      ^bool-round-trip true = refl
-
       !0→^0 : reduce∞ (!nat→^nat $ !0) ≡ prim (nat 0)
       !0→^0 = refl
 
       !3→^3 : reduce∞ (!nat→^nat $ !3) ≡ prim (nat 3)
       !3→^3 = refl
+
+      ^0→!0 : reduce∞ (^nat→!nat $ prim (nat 0)) ≡ !0
+      ^0→!0 = refl
+
+      ^1→!1 : reduce∞ (^nat→!nat $ prim (nat 1)) ≡ !1
+      ^1→!1 = refl
+
+      ^3→!3 : reduce∞ (^nat→!nat $ prim (nat 3)) ≡ !3
+      ^3→!3 = refl
