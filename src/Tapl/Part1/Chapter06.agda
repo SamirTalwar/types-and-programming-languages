@@ -1,7 +1,8 @@
 module Tapl.Part1.Chapter06 where
 
-open import Data.Fin
-open import Data.Nat
+open import Data.Fin as Fin using (Fin; zero; suc; #_; _≟_)
+open import Data.Nat as Nat using (ℕ; zero; suc)
+open import Function using (_∘_)
 
 infix 10 !_
 infixl 9 _$_
@@ -13,7 +14,7 @@ data Term (n : ℕ) : Set where
   _$_ : Term n → Term n → Term n
 
 liftTerm : {n : ℕ} → Term n → Term (suc n)
-liftTerm (! x)   = ! inject₁ x
+liftTerm (! x)   = ! Fin.inject₁ x
 liftTerm (fn t)  = fn (liftTerm t)
 liftTerm (f $ x) = liftTerm f $ liftTerm x
 
@@ -26,7 +27,6 @@ module Conversions where
   open import Data.Product
   open import Data.String
   open import Data.Vec as Vec using (Vec; []; _∷_)
-  open import Function using (_∘_)
   open import Relation.Binary.PropositionalEquality
   open import Relation.Nullary
 
@@ -40,13 +40,13 @@ module Conversions where
   append x xs = Vec.reverse (x ∷ Vec.reverse xs)
 
   removeNames : {n : ℕ} → Γ n → Lang ⊥ → Maybe (Term n)
-  removeNames free (! x) = Maybe.map (!_ ∘ opposite) (removeNames′ free x)
+  removeNames free (! x) = Maybe.map (!_ ∘ Fin.opposite) (removeNames′ free x)
     where
     removeNames′ : {n : ℕ} → Γ n → Id → Maybe (Fin n)
     removeNames′ [] x = nothing
     removeNames′ (_∷_ {n} x′ free) x with does (x ≈? x′)
-    ... | false = Maybe.map inject₁ (removeNames′ free x)
-    ... | true  = just (fromℕ n)
+    ... | false = Maybe.map Fin.inject₁ (removeNames′ free x)
+    ... | true  = just (Fin.fromℕ n)
   removeNames free (fn x ⇒ t) = Maybe.map (fn_) (removeNames (x ∷ free) t)
   removeNames free (f $ x) =
     let open Data.Maybe using (_>>=_) in do
@@ -65,10 +65,10 @@ module Conversions where
       x′ ← restoreNames free fresh x
       just (f′ $ x′)
 
-  _ : removeNames [] (fn "s" ⇒ fn "z" ⇒ ! "z") ≡ just (fn (fn (! inject (fromℕ 0))))
+  _ : removeNames [] (fn "s" ⇒ fn "z" ⇒ ! "z") ≡ just (fn (fn ! # 0))
   _ = refl
 
-  _ : removeNames [] (fn "s" ⇒ fn "z" ⇒ ! "z" $ (! "s" $ ! "z")) ≡ just (fn (fn (! inject (fromℕ 0) $ ((! fromℕ 1) $ (! inject (fromℕ 0))))))
+  _ : removeNames [] (fn "s" ⇒ fn "z" ⇒ ! "z" $ (! "s" $ ! "z")) ≡ just (fn (fn (! # 0 $ ((! # 1) $ (! # 0)))))
   _ = refl
 
   _ : let
@@ -82,4 +82,51 @@ module Conversions where
         t = fn "s" ⇒ fn "z" ⇒ ! "x" $ (! "s" $ ! "z")
       in
         (removeNames free t Maybe.>>= restoreNames free ("s" ∷ "z" ∷ [])) ≡ just t
+  _ = refl
+
+module Substitution where
+  open import Data.Bool using (false; true)
+  open import Relation.Binary.PropositionalEquality
+  open import Relation.Nullary
+
+  infix 12 [_↦_]_
+
+  [_↦_]_ : ∀ {n} → Fin n → Term n → Term n → Term n
+  [ n ↦ s ] t = substitute n s t 0
+    where
+    ↑ : ∀ {n} → ℕ → Term n → Term (suc n)
+    ↑ cut-off (! x) with does (Fin.toℕ x Nat.≥? cut-off)
+    ... | false = ! Fin.inject₁ x
+    ... | true  = ! suc x
+    ↑ cut-off (fn t) = fn (↑ (suc cut-off) t)
+    ↑ cut-off (f $ x) = ↑ cut-off f $ ↑ cut-off x
+    substitute : ∀ {n} → Fin n → Term n → Term n → ℕ → Term n
+    substitute n s t@(! x) cut-off with does (x ≟ n)
+    ... | false = t
+    ... | true  = s
+    substitute n s (fn t) cut-off = fn (substitute (suc n) (↑ cut-off s) t (suc cut-off))
+    substitute n s (f $ x) cut-off = (substitute n s f cut-off) $ (substitute n s x cut-off)
+
+  _ : let
+        t : Term 4
+        t = ! # 0
+        s : Term 4
+        s = ! # 3
+      in [ # 0 ↦ s ] t ≡ s
+  _ = refl
+
+  _ : let
+        t : Term 10
+        t = fn ! # 0
+        s : Term 10
+        s = ! # 7
+      in [ # 0 ↦ s ] t ≡ t
+  _ = refl
+
+  _ : let
+        t : Term 10
+        t = fn ! # 2
+        s : Term 10
+        s = (! # 2) $ (fn ! # 0)
+      in [ # 1 ↦ s ] t ≡ fn ((! # 3) $ (fn ! # 0))
   _ = refl
