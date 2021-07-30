@@ -22,6 +22,56 @@ liftTerm (var x) = var (Fin.inject₁ x)
 liftTerm (fn t)  = fn (liftTerm t)
 liftTerm (f $ x) = liftTerm f $ liftTerm x
 
+module Examples where
+  !id : ∀ {n} → Term n
+  !id = fn ! 0
+
+  !true !false !if !not !and !or : ∀ {n} → Term n
+  !true  = fn fn ! 1
+  !false = fn fn ! 0
+  !if = fn fn fn (! 2 $ ! 1 $ ! 0)
+  !not = fn fn fn (! 2 $ ! 0 $ ! 1)
+  !and = fn fn (! 1 $ ! 0 $ !false)
+  !or = fn fn (! 1 $ !true $ ! 0)
+
+  !pair !fst !snd : ∀ {n} → Term n
+  !pair = fn fn fn (! 0 $ ! 2 $ ! 1)
+  !fst = fn (! 0 $ !true)
+  !snd = fn (! 0 $ !false)
+
+  !ℕ0 !ℕ1 !ℕ2 !ℕ3 !iszero !succ !pred !+ !- !* !^ !eq : ∀ {n} → Term n
+  !ℕ0 = fn fn ! 0
+  !ℕ1 = fn fn (! 1 $ ! 0)
+  !ℕ2 = fn fn (! 1 $ (! 1 $ ! 0))
+  !ℕ3 = fn fn (! 1 $ (! 1 $ (! 1 $ ! 0)))
+  !iszero = fn (! 0 $ (fn !false) $ !true)
+  !succ = fn fn fn (! 1 $ (! 2 $ ! 1 $ ! 0))
+  !pred = fn (!fst $ (! 0 $ (fn (!pair $ (!snd $ ! 0) $ (!succ $ (!snd $ ! 0)))) $ (!pair $ !ℕ0 $ !ℕ0)))
+  !+ = fn fn fn fn (! 3 $ ! 1 $ (! 2 $ ! 1 $ ! 0))
+  !- = fn fn (! 0 $ !pred $ ! 1)
+  !* = fn fn (! 0 $ (!+ $ ! 1) $ !ℕ0)
+  !^ = fn fn (! 0 $ (!* $ ! 1) $ !ℕ1)
+  !eq = fn fn (!and $ (!iszero $ (!- $ ! 1 $ ! 0)) $ (!iszero $ (!- $ ! 0 $ ! 1)))
+
+  !nil !cons !isnil !head !tail : ∀ {n} → Term n
+  !nil = fn fn ! 0
+  !cons = fn fn fn fn (! 1 $ ! 3 $ (! 2 $ ! 1 $ ! 0))
+  !isnil = fn (! 0 $ (fn fn !false) $ !true)
+  !head = fn fn (! 1 $ (fn fn ! 1) $ ! 0)
+  !tail = fn (!fst $ (! 0 $ (fn fn (!pair $ (!snd $ ! 0) $ (!cons $ ! 1 $ (!snd $ ! 0)))) $ (!pair $ !nil $ !nil)))
+
+  !omega : ∀ {n} → Term n
+  !omega = (fn (! 0 $ ! 0)) $ (fn (! 0 $ ! 0))
+
+  !fix : ∀ {n} → Term n
+  !fix = fn ((fn (! 1 $ (! 0 $ ! 0))) $ (fn (! 1 $ (! 0 $ ! 0))))
+
+  !factorial : ∀ {n} → Term n
+  !factorial = !fix $ (fn fn (!if $ (!iszero $ ! 0) $ !ℕ1 $ (!* $ ! 0 $ (! 1 $ (!pred $ ! 0)))))
+
+  !sum : ∀ {n} → Term n
+  !sum = fn (! 0 $ !+ $ !ℕ0)
+
 module Conversions where
   open import Data.Bool
   open import Data.Empty
