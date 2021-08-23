@@ -1,8 +1,9 @@
 module Tapl.Part1.Chapter06 where
 
 open import Data.Fin as Fin using (Fin; zero; suc; #_; _≟_)
-open import Data.Nat as Nat using (ℕ; zero; suc)
+open import Data.Nat as Nat using (ℕ; zero; suc; _+_)
 open import Function using (_∘_)
+open import Relation.Binary.PropositionalEquality
 open import Relation.Nullary.Decidable
 
 infix 10 !_
@@ -53,6 +54,13 @@ module Examples where
   !^ = fn fn (! 0 $ (!* $ ! 1) $ !ℕ1)
   !eq = fn fn (!and $ (!iszero $ (!- $ ! 1 $ ! 0)) $ (!iszero $ (!- $ ! 0 $ ! 1)))
 
+  !ℕ : ∀ {n} → ℕ → Term n
+  !ℕ n = fn fn (!ℕ′ n)
+    where
+    !ℕ′ : ∀ {n} → ℕ → Term (suc (suc n))
+    !ℕ′ zero = ! 0
+    !ℕ′ (suc n) = ! 1 $ !ℕ′ n
+
   !nil !cons !isnil !head !tail : ∀ {n} → Term n
   !nil = fn fn ! 0
   !cons = fn fn fn fn (! 1 $ ! 3 $ (! 2 $ ! 1 $ ! 0))
@@ -81,7 +89,6 @@ module Conversions where
   open import Data.Product
   open import Data.String
   open import Data.Vec as Vec using (Vec; []; _∷_)
-  open import Relation.Binary.PropositionalEquality
   open import Relation.Nullary
 
   import Tapl.Part1.Chapter05
@@ -143,23 +150,24 @@ module Substitution where
   open import Relation.Binary.PropositionalEquality
   open import Relation.Nullary
 
+  ↑ : ∀ {n} → Term n → Term (suc n)
+  ↑ = ↑′ zero
+    where
+    ↑′ : ∀ {n} → Fin (suc n) → Term n → Term (suc n)
+    ↑′ cut-off (var x) with does (cut-off Fin.≤? Fin.inject₁ x)
+    ... | false = var (Fin.inject₁ x)
+    ... | true  = var (suc x)
+    ↑′ cut-off (fn t) = fn (↑′ (suc cut-off) t)
+    ↑′ cut-off (f $ x) = ↑′ cut-off f $ ↑′ cut-off x
+
   infix 12 [_↦_]_
 
   [_↦_]_ : ∀ {n} → Fin n → Term n → Term n → Term n
-  [ n ↦ s ] t = substitute n s t 0
-    where
-    ↑ : ∀ {n} → ℕ → Term n → Term (suc n)
-    ↑ cut-off (var x) with does (Fin.toℕ x Nat.≥? cut-off)
-    ... | false = var (Fin.inject₁ x)
-    ... | true  = var (suc x)
-    ↑ cut-off (fn t) = fn (↑ (suc cut-off) t)
-    ↑ cut-off (f $ x) = ↑ cut-off f $ ↑ cut-off x
-    substitute : ∀ {n} → Fin n → Term n → Term n → ℕ → Term n
-    substitute n s t@(var x) cut-off with does (x ≟ n)
-    ... | false = t
-    ... | true  = s
-    substitute n s (fn t) cut-off = fn (substitute (suc n) (↑ cut-off s) t (suc cut-off))
-    substitute n s (f $ x) cut-off = (substitute n s f cut-off) $ (substitute n s x cut-off)
+  [ n ↦ s ] t@(var x) with does (x ≟ n)
+  ... | false = t
+  ... | true  = s
+  [ n ↦ s ] (fn t) = fn [ suc n ↦ (↑ s) ] t
+  [ n ↦ s ] (f $ x) = ([ n ↦ s ] f) $ ([ n ↦ s ] x)
 
   _ : let
         t : Term 4
@@ -183,4 +191,128 @@ module Substitution where
         s : Term 10
         s = ! 2 $ (fn ! 0)
       in [ # 1 ↦ s ] t ≡ fn (! 3 $ (fn ! 0))
+  _ = refl
+
+module Reduction where
+  open import Data.Bool using (false; true)
+  import Data.Fin.Properties as Finₚ
+  import Data.Maybe
+  open import Data.Maybe as Maybe using (Maybe; just; nothing)
+  import Data.Nat.Properties as ℕₚ
+  open import Relation.Binary.PropositionalEquality
+  open import Relation.Nullary
+  open Substitution
+  open Examples
+
+  data Reduction (n : ℕ) : Set where
+    failed : Term n → Reduction n
+    reducing : Term n → Reduction n
+    reduced : Term n → Reduction n
+
+  reduction-map : ∀ {m n} → (Term m → Term n) → Reduction m → Reduction n
+  reduction-map f (failed t)   = failed (f t)
+  reduction-map f (reducing t) = reducing (f t)
+  reduction-map f (reduced t)  = reduced (f t)
+
+  ↓ : ∀ {n} → Term (suc n) → Maybe (Term n)
+  ↓ t = ↓′ zero t
+    where
+    ↓var : ∀ {n} → Fin (suc n) → Fin (suc n) → Maybe (Fin n)
+    ↓var         zero          zero    = nothing
+    ↓var {suc n} zero          (suc v) = just v
+    ↓var {suc n} (suc cut-off) zero    = just zero
+    ↓var {suc n} (suc cut-off) (suc v) = Maybe.map suc (↓var cut-off v)
+    ↓′ : ∀ {n} → Fin (suc n) → Term (suc n) → Maybe (Term n)
+    ↓′ cut-off (var v) = Maybe.map var (↓var cut-off v)
+    ↓′ cut-off (fn t) = Maybe.map fn_ (↓′ (suc cut-off) t)
+    ↓′ cut-off (f $ x) =
+      let open Data.Maybe using (_>>=_) in
+      do
+        f′ ← ↓′ cut-off f
+        x′ ← ↓′ cut-off x
+        just (f′ $ x′)
+
+  reduce : ∀ {n} → Term n → Reduction n
+  reduce t@(var _) = reduced t
+  reduce (fn t) = reduction-map fn_ (reduce t)
+  reduce (var v $ x) = reduction-map (var v $_) (reduce x)
+  reduce (t@(f $ x) $ y) = reduction-map (_$ y) (reduce t)
+  reduce {n} t@((fn body) $ x) with ↓ ([ zero ↦ ↑ x ] body)
+  ... | nothing = failed t
+  ... | just t′ = reducing t′
+
+  _ : reduce {1} ((fn ! 0) $ ! 0) ≡ reducing (! 0)
+  _ = refl
+
+  _ : reduce {2} ((fn ! 1 $ ! 0 $ ! 2) $ (fn ! 0)) ≡ reducing (! 0 $ (fn ! 0) $ ! 1)
+  _ = refl
+
+  _ : reduce {2} ((fn ! 1 $ ! 0 $ ! 2) $ ! 0) ≡ reducing (! 0 $ ! 0 $ ! 1)
+  _ = refl
+
+  _ : reduce {1} (fn fn ! 1 $ ((fn ! 0) $ ! 0)) ≡ reducing (fn fn ! 1 $ ! 0)
+  _ = refl
+
+  reduceₙ : ∀ {n} → ℕ → Term n → Reduction n
+  reduceₙ zero t = reducing t
+  reduceₙ (suc fuel) t with reduce t
+  ... | failed t′   = failed t′
+  ... | reducing t′ = reduceₙ fuel t′
+  ... | reduced t′  = reduced t′
+
+module ExampleReductions where
+  open import Data.Maybe as Maybe using (Maybe; just; nothing)
+  open import Relation.Binary.PropositionalEquality
+  open Examples
+  open Reduction
+
+  reduce∞ : ∀ {n} → Term n → Reduction n
+  reduce∞ t = reduceₙ 100 t
+
+  _ : reduce∞ {0} (!if $ !true $ !ℕ2 $ !ℕ3) ≡ reduced !ℕ2
+  _ = refl
+
+  _ : reduce∞ {0} (!if $ (!or $ (!not $ !true) $ (!and $ !true $ !false)) $ !ℕ3 $ !ℕ1) ≡ reduced !ℕ1
+  _ = refl
+
+  _ : reduce∞ {10} (!fst $ (!pair $ ! 5 $ ! 2)) ≡ reduced (! 5)
+  _ = refl
+
+  _ : reduce∞ {0} (!pred $ !ℕ0) ≡ reduced !ℕ0
+  _ = refl
+
+  _ : reduce∞ {0} (!pred $ !ℕ1) ≡ reduced !ℕ0
+  _ = refl
+
+  _ : reduce∞ {0} (!pred $ !ℕ2) ≡ reduced !ℕ1
+  _ = refl
+
+  _ : reduce∞ {0} (!pred $ !ℕ3) ≡ reduced !ℕ2
+  _ = refl
+
+  _ : reduce∞ {0} (!pred $ (!succ $ (!pred $ (!succ $ (!succ $ !ℕ0))))) ≡ reduced (!ℕ1)
+  _ = refl
+
+  _ : reduce∞ {0} (!^ $ !ℕ3 $ !ℕ2) ≡ reduced (!ℕ 9)
+  _ = refl
+
+  _ : reduce∞ {0} ((!cons $ !ℕ1 $ (!cons $ !ℕ2 $ (!cons $ !ℕ3 $ !nil))) $ !+ $ !ℕ0) ≡ reduced (!ℕ 6)
+  _ = refl
+
+  omega-does-not-reduce : ∀ {n} → reduce {n} !omega ≡ reducing !omega
+  omega-does-not-reduce = refl
+
+  _ : reduce∞ {0} (!factorial $ !ℕ0) ≡ reduced !ℕ1
+  _ = refl
+
+  _ : reduce∞ {0} (!factorial $ !ℕ1) ≡ reduced !ℕ1
+  _ = refl
+
+  _ : reduceₙ {0} 1000 (!factorial $ !ℕ2) ≡ reduced !ℕ2
+  _ = refl
+
+  _ : reduceₙ {0} 1000 (!factorial $ !ℕ3) ≡ reduced (!ℕ 6)
+  _ = refl
+
+  _ : reduce∞ {0} (!sum $ (!cons $ !ℕ1 $ (!cons $ !ℕ2 $ (!cons $ !ℕ3 $ (!cons $ !ℕ2 $ (!cons $ !ℕ1 $ !nil)))))) ≡ reduced (!ℕ 9)
   _ = refl
