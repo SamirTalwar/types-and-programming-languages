@@ -147,6 +147,8 @@ module Conversions where
 
 module Substitution where
   open import Data.Bool using (false; true)
+  import Data.Maybe
+  open import Data.Maybe as Maybe using (Maybe; just; nothing)
   open import Relation.Binary.PropositionalEquality
   open import Relation.Nullary
 
@@ -160,6 +162,24 @@ module Substitution where
     ↑′ cut-off (fn t) = fn (↑′ (suc cut-off) t)
     ↑′ cut-off (f $ x) = ↑′ cut-off f $ ↑′ cut-off x
 
+  ↓ : ∀ {n} → Term (suc n) → Maybe (Term n)
+  ↓ t = ↓′ zero t
+    where
+    ↓var : ∀ {n} → Fin (suc n) → Fin (suc n) → Maybe (Fin n)
+    ↓var         zero          zero    = nothing
+    ↓var {suc n} zero          (suc v) = just v
+    ↓var {suc n} (suc cut-off) zero    = just zero
+    ↓var {suc n} (suc cut-off) (suc v) = Maybe.map suc (↓var cut-off v)
+    ↓′ : ∀ {n} → Fin (suc n) → Term (suc n) → Maybe (Term n)
+    ↓′ cut-off (var v) = Maybe.map var (↓var cut-off v)
+    ↓′ cut-off (fn t) = Maybe.map fn_ (↓′ (suc cut-off) t)
+    ↓′ cut-off (f $ x) =
+      let open Data.Maybe using (_>>=_) in
+      do
+        f′ ← ↓′ cut-off f
+        x′ ← ↓′ cut-off x
+        just (f′ $ x′)
+
   infix 12 [_↦_]_
 
   [_↦_]_ : ∀ {n} → Fin n → Term n → Term n → Term n
@@ -168,6 +188,9 @@ module Substitution where
   ... | true  = s
   [ n ↦ s ] (fn t) = fn [ suc n ↦ (↑ s) ] t
   [ n ↦ s ] (f $ x) = ([ n ↦ s ] f) $ ([ n ↦ s ] x)
+
+  apply : ∀ {n} → Term (suc n) → Term n → Maybe (Term n)
+  apply function-body argument = ↓ ([ zero ↦ ↑ argument ] function-body)
 
   _ : let
         t : Term 4
@@ -201,8 +224,9 @@ module Reduction where
   import Data.Nat.Properties as ℕₚ
   open import Relation.Binary.PropositionalEquality
   open import Relation.Nullary
-  open Substitution
+
   open Examples
+  open Substitution
 
   data Reduction (n : ℕ) : Set where
     failed : Term n → Reduction n
@@ -214,30 +238,12 @@ module Reduction where
   reduction-map f (reducing t) = reducing (f t)
   reduction-map f (reduced t)  = reduced (f t)
 
-  ↓ : ∀ {n} → Term (suc n) → Maybe (Term n)
-  ↓ t = ↓′ zero t
-    where
-    ↓var : ∀ {n} → Fin (suc n) → Fin (suc n) → Maybe (Fin n)
-    ↓var         zero          zero    = nothing
-    ↓var {suc n} zero          (suc v) = just v
-    ↓var {suc n} (suc cut-off) zero    = just zero
-    ↓var {suc n} (suc cut-off) (suc v) = Maybe.map suc (↓var cut-off v)
-    ↓′ : ∀ {n} → Fin (suc n) → Term (suc n) → Maybe (Term n)
-    ↓′ cut-off (var v) = Maybe.map var (↓var cut-off v)
-    ↓′ cut-off (fn t) = Maybe.map fn_ (↓′ (suc cut-off) t)
-    ↓′ cut-off (f $ x) =
-      let open Data.Maybe using (_>>=_) in
-      do
-        f′ ← ↓′ cut-off f
-        x′ ← ↓′ cut-off x
-        just (f′ $ x′)
-
   reduce : ∀ {n} → Term n → Reduction n
   reduce t@(var _) = reduced t
   reduce (fn t) = reduction-map fn_ (reduce t)
   reduce (var v $ x) = reduction-map (var v $_) (reduce x)
   reduce (t@(f $ x) $ y) = reduction-map (_$ y) (reduce t)
-  reduce {n} t@((fn body) $ x) with ↓ ([ zero ↦ ↑ x ] body)
+  reduce {n} t@((fn body) $ x) with apply body x
   ... | nothing = failed t
   ... | just t′ = reducing t′
 
@@ -263,6 +269,7 @@ module Reduction where
 module ExampleReductions where
   open import Data.Maybe as Maybe using (Maybe; just; nothing)
   open import Relation.Binary.PropositionalEquality
+
   open Examples
   open Reduction
 
