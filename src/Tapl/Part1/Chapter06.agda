@@ -216,6 +216,31 @@ module Substitution where
       in [ # 1 ↦ s ] t ≡ fn (! 3 $ (fn ! 0))
   _ = refl
 
+module SubstitutionRedux where
+  open import Data.Bool using (false; true)
+  open import Data.Empty
+  import Data.Fin.Properties as Finₚ
+  import Data.Nat.Properties as Natₚ
+  open import Relation.Binary.Definitions
+  open import Relation.Binary.PropositionalEquality
+  open import Relation.Nullary
+
+  open Substitution
+
+  apply-redux : ∀ {n} → Term (suc n) → Term n → Term n
+  apply-redux = apply′ zero
+    where
+    <-< : ∀ {m n p : ℕ} → m Nat.< n → n Nat.< p → suc m Nat.< p
+    <-< m<n n<p = Natₚ.≤-trans (Nat.s≤s m<n) n<p
+    apply′ : ∀ {n} → Fin (suc n) → Term (suc n) → Term n → Term n
+    apply′ i (var v)        argument with Finₚ.<-cmp v i
+    apply′ i (var v)        argument | tri< v<i _ _ with <-< v<i (Finₚ.toℕ<n i)
+    ... | Nat.s≤s v<n = var (Fin.lower₁ v (≢-sym (Natₚ.<⇒≢ v<n)))
+    apply′ i (var v)        argument | tri≈   _ _ _ = argument
+    apply′ i (var (suc v′)) argument | tri>   _ _ _ = var v′
+    apply′ i (fn body) argument = fn (apply′ (suc i) body (↑ argument))
+    apply′ i (f $ x) argument = apply′ i f argument $ apply′ i x argument
+
 module Reduction where
   open import Data.Bool using (false; true)
   import Data.Fin.Properties as Finₚ
@@ -227,14 +252,13 @@ module Reduction where
 
   open Examples
   open Substitution
+  open SubstitutionRedux
 
   data Reduction (n : ℕ) : Set where
-    failed : Term n → Reduction n
     reducing : Term n → Reduction n
     reduced : Term n → Reduction n
 
   reduction-map : ∀ {m n} → (Term m → Term n) → Reduction m → Reduction n
-  reduction-map f (failed t)   = failed (f t)
   reduction-map f (reducing t) = reducing (f t)
   reduction-map f (reduced t)  = reduced (f t)
 
@@ -243,9 +267,7 @@ module Reduction where
   reduce (fn t) = reduction-map fn_ (reduce t)
   reduce (var v $ x) = reduction-map (var v $_) (reduce x)
   reduce (t@(f $ x) $ y) = reduction-map (_$ y) (reduce t)
-  reduce {n} t@((fn body) $ x) with apply body x
-  ... | nothing = failed t
-  ... | just t′ = reducing t′
+  reduce {n} t@((fn body) $ x) = reducing (apply-redux body x)
 
   _ : reduce {1} ((fn ! 0) $ ! 0) ≡ reducing (! 0)
   _ = refl
@@ -262,7 +284,6 @@ module Reduction where
   reduceₙ : ∀ {n} → ℕ → Term n → Reduction n
   reduceₙ zero t = reducing t
   reduceₙ (suc fuel) t with reduce t
-  ... | failed t′   = failed t′
   ... | reducing t′ = reduceₙ fuel t′
   ... | reduced t′  = reduced t′
 
